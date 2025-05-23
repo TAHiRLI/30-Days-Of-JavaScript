@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -51,6 +51,7 @@ using EleWise.ELMA.Workflow.Services;
 using EleWise.ELMA.Workflow.Web.Models;
 using NHibernate.Criterion;
 using Newtonsoft.Json;
+using System.Text.RegularExpressions;
 using Context = EleWise.ELMA.Model.Entities.ProcessContext.P_Vacation;
 
 namespace EleWise.ELMA.Model.Scripts
@@ -125,9 +126,7 @@ namespace EleWise.ELMA.Model.Scripts
 			//					context.DepChiefs.AddAll (structure.OrganizationItemChiefGroup.Users);
 			//				}
 			//			}
-			
-			
-			context.HRSection.AddAll (DocflowGlobal.UserHelper.GetHR_Kadr ());
+			//context.HRSection.AddAll (DocflowGlobal.UserHelper.GetHR_Kadr ());
 		}
 
 		public virtual void GetSubstitutionUserInfo (Context context, EleWise.ELMA.Model.Views.FormViewBuilder<Context> form)
@@ -405,9 +404,8 @@ namespace EleWise.ELMA.Model.Scripts
 		{
 			FindVacationForEmployee (context);
 			GetUsedVacDays (context);
-			if (!context.VacationType.Code.Equals("1"))
-			{
-				DecreaseVacationDays(context.VacationDaysInfo, context.Days.Value);
+			if (!context.VacationType.Code.Equals ("1")) {
+				DecreaseVacationDays (context.VacationDaysInfo, context.Days.Value);
 			}
 			GenerateNewStatementVersion (context);
 			DateTime endDate = new DateTime (context.VacationEndDate.Value.Year, context.VacationEndDate.Value.Month, context.VacationEndDate.Value.Day, 23, 59, 59);
@@ -581,6 +579,7 @@ namespace EleWise.ELMA.Model.Scripts
 		/// <param name="context">Контекст процесса</param>
 		public virtual void IsCustomApprove (Context context)
 		{
+			
 			//начальник независимого отдела
 			if (context.PositionOrgItem != null && context.PositionOrgItem.OrganizationItemType != null && context.PositionOrgItem.OrganizationItemType.Code == "CHIEF" && context.PositionOrgItem.Parent != null && context.PositionOrgItem.Parent.OrganizationItemType != null && context.PositionOrgItem.Parent.OrganizationItemType.Code == "SECTION" && context.PositionOrgItem.Parent.Parent != null && context.PositionOrgItem.Parent.Parent.OrganizationItemType != null && context.PositionOrgItem.Parent.Parent.OrganizationItemType.Code == "CURATOR") {
 				context.AppUsersList1.Clear ();
@@ -1529,12 +1528,9 @@ namespace EleWise.ELMA.Model.Scripts
 			}
 			while (!isInBranch);
 			context.IsInBranch = isInBranch;
-			
-			
 			//
 			context.OrganizationItemPosition = context.PositionOrgItem.OrganizationItemPosition;
 			//
-			
 		}
 
 		/// <summary>
@@ -1605,6 +1601,8 @@ namespace EleWise.ELMA.Model.Scripts
 				}
 				string warningHtml = "<p style='color:red; font-size:2em;'>Əməkdaş üçün seçimiş tarixlər üzrə məzuniyyət yaradıla bilməz! / Leave cannot be created for an employee on optional dates!" + Environment.NewLine + absenceinfo + "</p>";
 				context.AbsenceWarning = new HtmlString (warningHtml);
+				// HTML tag-ları sil
+        		context.ResultExternal = Regex.Replace(context.AbsenceWarning.ToString(), "<.*?>", string.Empty);
 				return true;
 			}
 			return false;
@@ -2045,38 +2043,38 @@ namespace EleWise.ELMA.Model.Scripts
 			CalculateStartWorkDay (context, form);
 			SubstitutionCheckRequiredReplacement (context, form);
 			CalculateAvailableVacDays (context);
-			CheckVacationRule(context, form);
-			
+			CheckVacationRule (context, form);
 		}
-		public void CheckVacationRule(Context context, EleWise.ELMA.Model.Views.FormViewBuilder<Context> form)
+
+		public void CheckVacationRule (Context context, EleWise.ELMA.Model.Views.FormViewBuilder<Context> form)
 		{
 			string notificationText = "";
-			if (context.VacationType.Code.Equals("1"))
-			{
-				var vacCount = context.FullVacInfo.Where(x => x.StartPeriod <= context.StatementDate).Select(x => x.Unused).Sum() - context.Days;
-				if (vacCount < 0)
-				{
+			if (context.VacationType.Code.Equals ("1")) {
+				var vacCount = context.FullVacInfo.Where (x => x.StartPeriod <= context.StatementDate).Select (x => x.Unused).Sum () - context.Days;
+				if (vacCount < 0) {
 					context.Days = 0;
 					context.StatementDate = null;
 					context.StartWork = null;
 					notificationText = "İstifadə etmək istədiyiniz məzuniyyətin gün sayı cari limitinizdən artıqdır!" + Environment.NewLine + "The number of vacation days you want to use exceeds your current limit!";
-					context.VacationAlert = new HtmlString(string.Format("<p style='color:red; font-size:1.3em;'> {0}</p>", notificationText));
-					form.For(x => x.VacationAlert).Visible(true).ReadOnly(true);
-				} else if (context.CurrentAvailableVacDays < 0)
-				{
-					notificationText = string.Format("Sizin cari günə formalaşmış {0} gün məzuniyyətiniz var.{1} gün avans məzuniyyət istifadə edəcəksiniz.", 0, context.Days) + Environment.NewLine + string.Format("You currently have {0} days of accrued leave. You will use {1} days of advance leave.", 0, context.Days);
-					context.VacationAlert = new HtmlString(string.Format("<p style='color:red; font-size:1.3em;'> {0} </p>", notificationText));
-					form.For(x => x.VacationAlert).Visible(true).ReadOnly(true);
-				} else if (context.Days > context.CurrentAvailableVacDays)
-				{
-					notificationText = string.Format("Sizin cari günə formalaşmış {0} gün məzuniyyətiniz var.{1} gün avans məzuniyyət istifadə edəcəksiniz.", context.CurrentAvailableVacDays, context.Days - context.CurrentAvailableVacDays) + Environment.NewLine + string.Format("You currently have {0} days of accrued leave. You will use {1} days of advance leave.", context.CurrentAvailableVacDays, context.Days - context.CurrentAvailableVacDays);
-					context.VacationAlert = new HtmlString(string.Format("<p style='color:red; font-size:1.3em;'> {0} </p>", notificationText));
-					form.For(x => x.VacationAlert).Visible(true).ReadOnly(true);
-				} else
-				{
-					context.VacationAlert = null;
-					form.For(x => x.VacationAlert).Visible(false).ReadOnly(true);
+					context.VacationAlert = new HtmlString (string.Format ("<p style='color:red; font-size:1.3em;'> {0}</p>", notificationText));
+					form.For (x => x.VacationAlert).Visible (true).ReadOnly (true);
 				}
+				else
+					if (context.CurrentAvailableVacDays < 0) {
+						notificationText = string.Format ("Sizin cari günə formalaşmış {0} gün məzuniyyətiniz var.{1} gün avans məzuniyyət istifadə edəcəksiniz.", 0, context.Days) + Environment.NewLine + string.Format ("You currently have {0} days of accrued leave. You will use {1} days of advance leave.", 0, context.Days);
+						context.VacationAlert = new HtmlString (string.Format ("<p style='color:red; font-size:1.3em;'> {0} </p>", notificationText));
+						form.For (x => x.VacationAlert).Visible (true).ReadOnly (true);
+					}
+					else
+						if (context.Days > context.CurrentAvailableVacDays) {
+							notificationText = string.Format ("Sizin cari günə formalaşmış {0} gün məzuniyyətiniz var.{1} gün avans məzuniyyət istifadə edəcəksiniz.", context.CurrentAvailableVacDays, context.Days - context.CurrentAvailableVacDays) + Environment.NewLine + string.Format ("You currently have {0} days of accrued leave. You will use {1} days of advance leave.", context.CurrentAvailableVacDays, context.Days - context.CurrentAvailableVacDays);
+							context.VacationAlert = new HtmlString (string.Format ("<p style='color:red; font-size:1.3em;'> {0} </p>", notificationText));
+							form.For (x => x.VacationAlert).Visible (true).ReadOnly (true);
+						}
+						else {
+							context.VacationAlert = null;
+							form.For (x => x.VacationAlert).Visible (false).ReadOnly (true);
+						}
 			}
 		}
 
@@ -2635,7 +2633,6 @@ namespace EleWise.ELMA.Model.Scripts
 		/// <param name="context">Контекст процесса</param>
 		public virtual void GetSettingsForUsers (Context context)
 		{
-			
 		}
 
 		public void FindVacationDaysFromObject (Context context)
@@ -2929,7 +2926,6 @@ namespace EleWise.ELMA.Model.Scripts
 				context.SelectedUser = context.SelectedUserEmployee.SystemUser;
 				context.PositionOrgItem = (context.SelectedUserEmployee.TemporaryPosition != null) ? context.SelectedUserEmployee.TemporaryPosition : context.SelectedUserEmployee.MainPosition;
 				context.SectionOrgItem = (KBDF_OrganizationItems)DocflowHelper.findInHierarchyUpper (context.PositionOrgItem, "SECTION", out isFound);
-				
 				// musteqil shobe axtarishi
 				context.DepartmentOrgItem = (KBDF_OrganizationItems)DocflowHelper.findInHierarchyUpper (context.PositionOrgItem, "INDEPENDENTSECTION", out isFound);
 				if (context.DepartmentOrgItem != null && context.DepartmentOrgItem.HRBCode == "1100000000") {
@@ -2991,112 +2987,96 @@ namespace EleWise.ELMA.Model.Scripts
 			context.JiraTeamSuccess = false;
 			var task = DocumentManager.Instance.GetTasksByDocument (context.VacationOrder, TaskBaseExtensions.ActiveTaskStatuses.ToList (), null).FirstOrDefault ();
 			//step 1. Push the process
-			var tasksFilter = InterfaceActivator.Create<IWorkflowTaskBaseFilter> ();        
-//			if (task == null)
-//			{
-//				task = DocumentManager.Instance.GetTasksByDocument(null, TaskBaseExtensions.CloseStatuses.ToList(), null).FirstOrDefault(a => ((IWorkflowTaskBase)a).WorkflowBookmark.ElementUid == Guid.Parse("fb723a8f-e736-4d5e-8e89-fc460b15841e"));
-//				if (task == null)
-//				{
-//					context.JiraTeamSuccess = false;
-//					return;
-//				}
-//			}
-			
-//			if (TaskBaseExtensions.ActiveTaskStatuses.ToList().Contains(task.Status))
-//			{
-//				
-//				//надо исполнять задачу
-//			}
-//			if(context.WorkflowInstance.Id == 31883442)
-//			{
-//				tasksFilter.Id = 33596554;
-//				context.JiraTeamSuccess = true;
-//			}
-//			if(context.WorkflowInstance.Id == 31898247)
-//			{
-//				tasksFilter.Id = 33596917;
-//				context.JiraTeamSuccess = true;
-//			}
-//			
-//			if(context.WorkflowInstance.Id == 31889928)
-//			{
-//				tasksFilter.Id = 33595103;
-//				context.JiraTeamSuccess = true;
-//			}
-//			
-//			if(context.WorkflowInstance.Id == 31869478)
-//			{
-//				tasksFilter.Id = 33590389;
-//				context.JiraTeamSuccess = true;
-//			}
-//			if(context.WorkflowInstance.Id == 31878547)
-//			{
-//				tasksFilter.Id = 33590909;
-//				context.JiraTeamSuccess = true;
-//			}
-//			if(context.WorkflowInstance.Id == 31868639)
-//			{
-//				tasksFilter.Id = 33590700;
-//				context.JiraTeamSuccess = true;
-//			}
-//			if(context.WorkflowInstance.Id == 31870586)
-//			{
-//				tasksFilter.Id = 33589768;
-//				context.JiraTeamSuccess = true;
-//			}
-//			if(context.WorkflowInstance.Id == 31878257)
-//			{
-//				tasksFilter.Id = 33590912;
-//				context.JiraTeamSuccess = true;
-//			}
-//			if(context.WorkflowInstance.Id == 31871635)
-//			{
-//				tasksFilter.Id = 33589820;
-//				context.JiraTeamSuccess = true;
-//			}
-//			if(context.WorkflowInstance.Id == 31878382)
-//			{
-//				tasksFilter.Id = 33590907;
-//				context.JiraTeamSuccess = true;
-//			}
-			
-			
-			
-			
-			
-			
-			
-			
-
-//			if(context.WorkflowInstance.Id == 31886682)
-//			{
-//				tasksFilter.Id = 33596481;
-//				context.JiraTeamSuccess = true;
-//			}
-//
-//			if(context.WorkflowInstance.Id == 31885859)
-//			{
-//				tasksFilter.Id = 33593422;
-//				context.JiraTeamSuccess = true;
-//			}
-//			if (!context.JiraTeamSuccess)
-//			{
-//				return;
-//			}
-
-			if (task != null)
-			{
+			var tasksFilter = InterfaceActivator.Create<IWorkflowTaskBaseFilter> ();
+			//			if (task == null)
+			//			{
+			//				task = DocumentManager.Instance.GetTasksByDocument(null, TaskBaseExtensions.CloseStatuses.ToList(), null).FirstOrDefault(a => ((IWorkflowTaskBase)a).WorkflowBookmark.ElementUid == Guid.Parse("fb723a8f-e736-4d5e-8e89-fc460b15841e"));
+			//				if (task == null)
+			//				{
+			//					context.JiraTeamSuccess = false;
+			//					return;
+			//				}
+			//			}
+			//			if (TaskBaseExtensions.ActiveTaskStatuses.ToList().Contains(task.Status))
+			//			{
+			//				
+			//				//надо исполнять задачу
+			//			}
+			//			if(context.WorkflowInstance.Id == 31883442)
+			//			{
+			//				tasksFilter.Id = 33596554;
+			//				context.JiraTeamSuccess = true;
+			//			}
+			//			if(context.WorkflowInstance.Id == 31898247)
+			//			{
+			//				tasksFilter.Id = 33596917;
+			//				context.JiraTeamSuccess = true;
+			//			}
+			//			
+			//			if(context.WorkflowInstance.Id == 31889928)
+			//			{
+			//				tasksFilter.Id = 33595103;
+			//				context.JiraTeamSuccess = true;
+			//			}
+			//			
+			//			if(context.WorkflowInstance.Id == 31869478)
+			//			{
+			//				tasksFilter.Id = 33590389;
+			//				context.JiraTeamSuccess = true;
+			//			}
+			//			if(context.WorkflowInstance.Id == 31878547)
+			//			{
+			//				tasksFilter.Id = 33590909;
+			//				context.JiraTeamSuccess = true;
+			//			}
+			//			if(context.WorkflowInstance.Id == 31868639)
+			//			{
+			//				tasksFilter.Id = 33590700;
+			//				context.JiraTeamSuccess = true;
+			//			}
+			//			if(context.WorkflowInstance.Id == 31870586)
+			//			{
+			//				tasksFilter.Id = 33589768;
+			//				context.JiraTeamSuccess = true;
+			//			}
+			//			if(context.WorkflowInstance.Id == 31878257)
+			//			{
+			//				tasksFilter.Id = 33590912;
+			//				context.JiraTeamSuccess = true;
+			//			}
+			//			if(context.WorkflowInstance.Id == 31871635)
+			//			{
+			//				tasksFilter.Id = 33589820;
+			//				context.JiraTeamSuccess = true;
+			//			}
+			//			if(context.WorkflowInstance.Id == 31878382)
+			//			{
+			//				tasksFilter.Id = 33590907;
+			//				context.JiraTeamSuccess = true;
+			//			}
+			//			if(context.WorkflowInstance.Id == 31886682)
+			//			{
+			//				tasksFilter.Id = 33596481;
+			//				context.JiraTeamSuccess = true;
+			//			}
+			//
+			//			if(context.WorkflowInstance.Id == 31885859)
+			//			{
+			//				tasksFilter.Id = 33593422;
+			//				context.JiraTeamSuccess = true;
+			//			}
+			//			if (!context.JiraTeamSuccess)
+			//			{
+			//				return;
+			//			}
+			if (task != null) {
 				tasksFilter.Id = task.Id;
 				context.JiraTeamSuccess = true;
-			} else
-			{
+			}
+			else {
 				context.JiraTeamSuccess = false;
 				return;
-				
 			}
-
-			
-			
 			// Присваиваем идентификатор процесса, для которого нужно получить активные задачи
 			tasksFilter.DisableSecurity = true;
 			// Отключаем проверку прав доступа к задачам
@@ -3153,7 +3133,7 @@ namespace EleWise.ELMA.Model.Scripts
 			vacInfo.Document = context.VacationStatement;
 			vacInfo.Employee = context.SelectedUserEmployee;
 			vacInfo.VacationType = context.VacationType;
-			vacInfo.Status = new DropDownItem ("0", "Rəhbərin təsdiqindədir");
+			vacInfo.Status = new DropDownItem ("0", "Rəhbərin təsdiqindədir");
 			vacInfo.StartDate = context.StatementDate;
 			vacInfo.EndDate = context.VacationEndDate;
 			if (context.VacationType.Code.Equals ("1")) {
@@ -3216,15 +3196,15 @@ namespace EleWise.ELMA.Model.Scripts
 			else {
 				if (bakuTime.Hour >= 0 && bakuTime.Hour < 10) {
 					bakuTime = TimeZoneInfo.ConvertTime (new DateTime (bakuTime.Year, bakuTime.Month, bakuTime.Day, 10, 0, 0), bakuTimeZone);
-				} else if (bakuTime.Hour >= 16 && bakuTime.Hour < 24)
-				{
-					bakuTime = TimeZoneInfo.ConvertTime(new DateTime(bakuTime.Year, bakuTime.Month, bakuTime.AddDays(1).Day, 10, 0, 0), bakuTimeZone);
 				}
+				else
+					if (bakuTime.Hour >= 16 && bakuTime.Hour < 24) {
+						bakuTime = TimeZoneInfo.ConvertTime (new DateTime (bakuTime.Year, bakuTime.Month, bakuTime.AddDays (1).Day, 10, 0, 0), bakuTimeZone);
+					}
 			}
 			var calendar = Locator.GetServiceNotNull<IProductionCalendarService> ();
-			while (!calendar.IsWorkDay (bakuTime))
-			{
-				bakuTime = bakuTime.AddDays(1);
+			while (!calendar.IsWorkDay (bakuTime)) {
+				bakuTime = bakuTime.AddDays (1);
 				bakuTime = new DateTime (bakuTime.Year, bakuTime.Month, bakuTime.Day, context.SubstitutionUserEmployee != null ? 9 : 10, 0, 0);
 			}
 			context.SignationDate = bakuTime;
@@ -3248,32 +3228,77 @@ namespace EleWise.ELMA.Model.Scripts
 			++context.Count;
 			return !context.JiraSuccesss && context.Count < 6;
 		}
-
+		
+		/// <summary>
+		/// DeleteQueryDB
+		/// </summary>
+		/// <param name="context">Контекст процесса</param>
+		public virtual void DeleteQueryDB(long UserId)
+		{
+			var provider = Locator.GetServiceNotNull<ITransformationProvider>();
+			var query = @"delete VacationUnique where Id = @p1";
+			var parameters = new Dictionary<string, object> { { "p1", UserId } };
+			provider.ExecuteNonQuery(query, parameters);
+		}
+		
+		/// <summary>
+		/// InsertQueryDB
+		/// </summary>
+		/// <param name="context">Контекст процесса</param>
+		public virtual void InsertQueryDB(long UserId)
+		{
+			var provider = Locator.GetServiceNotNull<ITransformationProvider>();
+			var query = @"INSERT INTO VacationUnique VALUES (@p1)";
+			var parameters = new Dictionary<string, object> { { "p1", UserId } };
+						
+			int maxRetries = 10;
+			int retryCount = 0;
+			bool success = false;
+			
+			while (!success && retryCount < maxRetries)
+			{
+			    try
+			    {
+			        provider.ExecuteNonQuery(query, parameters);
+			        success = true; 
+			    }
+			    catch (Exception ex)
+			    {
+			        retryCount++;
+					System.Threading.Thread.Sleep(5000); 
+			    }
+			}
+		}
+		
 		/// <summary>
 		/// RecalculateVacationInfo
 		/// </summary>
 		/// <param name="context">Контекст процесса</param>
 		public virtual void RecalculateVacationInfo (Context context)
 		{
+			InsertQueryDB(context.Initiator.Id);
 			if (!context.VacationType.Code.Equals ("1")) {
 				return;
 			}
-			if (context.VacationInfo != null) {
-				var eql = string.Format ("Employee = {0} AND VacationType = 1 AND Id <> {1} ", context.SelectedUserEmployee.Id, context.VacationInfo.Id) + " AND Status = '{0}Rəhbərin təsdiqindədir'";
-				var VacationsOnApprove = EntityManager<KBDF_VacationInfo>.Instance.Find (eql).ToList ();
-				long totalDaysOnApprove = 0;
-				if (VacationsOnApprove.Any ()) {
-					var usedVacs = VacationsOnApprove.SelectMany (x => x.UsedDays).ToList ();
-					totalDaysOnApprove = context.Days.Value + usedVacs.Sum (x => x.Days);
-				}
-				totalDaysOnApprove = totalDaysOnApprove == 0 ? context.Days.Value : totalDaysOnApprove;
-				ReturnVacationDays (context.VacationDaysInfo, totalDaysOnApprove);
+			if (context.VacationInfo != null)
+			{
+				// Fixed error of false incrementation of availableDays by removing return vacation days function
+				// Tahir Tahirli 23.05.2025
+//				var eql = string.Format ("Employee = {0} AND VacationType = 1 AND Id <> {1} ", context.SelectedUserEmployee.Id, context.VacationInfo.Id) + " AND Status = '{0}Rəhbərin təsdiqindədir'";
+//				var VacationsOnApprove = EntityManager<KBDF_VacationInfo>.Instance.Find (eql).ToList ();
+//				long totalDaysOnApprove = 0;
+//				if (VacationsOnApprove.Any ()) {
+//					var usedVacs = VacationsOnApprove.SelectMany (x => x.UsedDays).ToList ();
+//					totalDaysOnApprove = context.Days.Value + usedVacs.Sum (x => x.Days);
+//				}
+//				totalDaysOnApprove = totalDaysOnApprove == 0 ? context.Days.Value : totalDaysOnApprove;
+				
+//				ReturnVacationDays (context.VacationDaysInfo, totalDaysOnApprove);
 				FindVacationForEmployee (context);
 				GetUsedVacDays (context);
-				if (!context.VacationType.Code.Equals ("1")) {
-				DecreaseVacationDays (context.VacationDaysInfo, totalDaysOnApprove);
-			}
-				
+				if (context.VacationType.Code.Equals ("1")) {
+					DecreaseVacationDays (context.VacationDaysInfo, context.Days.Value);
+				}
 				context.VacationInfo.UsedDays.ForEach (x =>  {
 					x.Info = null;
 					x.Info = null;
@@ -3282,6 +3307,7 @@ namespace EleWise.ELMA.Model.Scripts
 				context.VacationInfo.UsedDays.Clear ();
 				context.VacationInfo.UsedDays.AddAll (CreateUsedVacationPeriods (context, context.UsedVacDays));
 			}
+			DeleteQueryDB(context.Initiator.Id);
 		}
 
 		public void DecreaseVacationDays (ISet<KBDF_VacationDays> vacationDays, long totalDecreasedDays)
@@ -3358,7 +3384,9 @@ namespace EleWise.ELMA.Model.Scripts
 				context.EimzaForRequiredReplacement = true;
 				return true;
 			}
-			else {
+			else
+			{
+				context.EimzaForRequiredReplacement = false;  // causing error. check process 33321872 (prod). ApprovedDocumentsEImza is null
 				return false;
 			}
 		}
@@ -3424,5 +3452,947 @@ namespace EleWise.ELMA.Model.Scripts
 			context.ApproveEImza = context.ApproversEImza.FirstOrDefault ();
 			context.ApproverEImza = EntityManager<KBDF_OrganizationItems>.Instance.Find (string.Format ("Users = {0}", context.ApproveEImza.Id)).FirstOrDefault ();
 		}
+
+		/// <summary>
+		/// CheckForOnChanges
+		/// </summary>
+		/// <param name="context">Контекст процесса</param>
+		public virtual void CheckForOnChanges (Context context)
+		{
+			ExternalLogBuilder(context, "CheckForOnChanges start");
+			
+			var formProperties = new List<FormProperty>
+			{
+				new FormProperty
+				{
+					Name = "SelectedUserEmployee",
+					ReadOnlyStatus = false,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.SelectedUserEmployee
+				},
+                new FormProperty
+				{
+					Name = "BranchOrgItem",
+					ReadOnlyStatus = true,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.BranchOrgItem
+				},
+                new FormProperty
+				{
+					Name = "DepartmentOrgItem",
+					ReadOnlyStatus = true,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.DepartmentOrgItem
+				},
+                new FormProperty
+				{
+					Name = "SectionOrgItem",
+					ReadOnlyStatus = true,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.SectionOrgItem
+				},
+                new FormProperty
+				{
+					Name = "SubSectionOrgItem",
+					ReadOnlyStatus = true,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.SubSectionOrgItem
+				},
+                new FormProperty
+				{
+					Name = "OrganizationItemPosition",
+					ReadOnlyStatus = true,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.OrganizationItemPosition
+				},
+                new FormProperty
+				{
+					Name = "SubstitutionUserEmployee",
+					ReadOnlyStatus = false,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.SubstitutionUserEmployee
+				},
+                new FormProperty
+				{
+					Name = "SubstituteOfSubstitutionEmp",
+					ReadOnlyStatus = false,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.SubstituteOfSubstitutionEmp
+				},
+                new FormProperty
+				{
+					Name = "VacationType",
+					ReadOnlyStatus = false,
+					VisibleStatus = true,
+					RequiredStatus = true,
+					Data = context.VacationType
+				},
+                new FormProperty
+				{
+					Name = "CertificationField",
+					ReadOnlyStatus = false,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.CertificationField
+				},
+                new FormProperty
+				{
+					Name = "CertificationType",
+					ReadOnlyStatus = false,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.CertificationType
+				},
+                new FormProperty
+				{
+					Name = "DogDate",
+					ReadOnlyStatus = false,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.DogDate
+				},
+                new FormProperty
+				{
+					Name = "MedicalCertificateNumber",
+					ReadOnlyStatus = false,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.MedicalCertificateNumber
+				},
+                new FormProperty
+				{
+					Name = "StatementDate",
+					ReadOnlyStatus = false,
+					VisibleStatus = true,
+					RequiredStatus = true,
+					Data = context.StatementDate
+				},
+                new FormProperty
+				{
+					Name = "VacationEndDate",
+					ReadOnlyStatus = false,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.VacationEndDate
+				},
+                new FormProperty
+				{
+					Name = "MarriageDays",
+					ReadOnlyStatus = true,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.MarriageDays
+				},
+                new FormProperty
+				{
+					Name = "VacationTotalCount",
+					ReadOnlyStatus = true,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.VacationTotalCount
+				},
+                new FormProperty
+				{
+					Name = "Days",
+					ReadOnlyStatus = false,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.Days
+				},
+                new FormProperty
+				{
+					Name = "PaymentStatus",
+					ReadOnlyStatus = false,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.PaymentStatus
+				},
+                new FormProperty
+				{
+					Name = "StartWork",
+					ReadOnlyStatus = true,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.StartWork
+				},
+                new FormProperty
+				{
+					Name = "VacationStatementVersion",
+					ReadOnlyStatus = true,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.VacationStatementVersion
+				},
+                new FormProperty
+				{
+					Name = "SupportingDocuments",
+					ReadOnlyStatus = false,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.SupportingDocuments
+				},
+                new FormProperty
+				{
+					Name = "ReplacementWarning",
+					ReadOnlyStatus = true,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.ReplacementWarning
+				},
+                new FormProperty
+				{
+					Name = "Notification",
+					ReadOnlyStatus = true,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.Notification
+				},
+                new FormProperty
+				{
+					Name = "VacationAlert",
+					ReadOnlyStatus = true,
+					VisibleStatus = true,
+					RequiredStatus = false,
+					Data = context.VacationAlert
+				}
+			};
+			
+			var formPropertyService = new FormPropertyService(formProperties);
+			
+			try
+			{
+				#region Start Form OnLoad
+				StartForm(context, formPropertyService);
+				#endregion
+				#region Əməkdaş OnChange()
+				FindStructureAndVaInfoByEmp(context, formPropertyService);
+				#endregion
+				#region Əvəz edən şəxs OnChange()
+				GetSubstitutionUserInfo(context, formPropertyService);
+				#endregion
+				#region Əvəz edən şəxsin əvəz edicisi OnChange()
+				SearchOrChangeSubstitutionValue(context);
+				#endregion
+				#region Məzuniyyət növü OnChange()
+				VacTypeDynamic(context, formPropertyService);
+				#endregion
+				#region Sahə OnChange()
+				CertificationFieldChange(context, formPropertyService);
+				#endregion
+				#region Sertifikat OnChange()
+				CertificateType_OnChange(context, formPropertyService);
+				#endregion
+				#region Məzuniyyətə çıxma tarixi OnChange()
+				StatementDate_OnChange(context, formPropertyService);
+				#endregion
+				#region Məzuniyyətin bitmə tarixi OnChange()
+				Days_OnChange(context, formPropertyService);
+				#endregion
+				#region Günlər OnChange()
+				Days_OnChange(context, formPropertyService);
+				#endregion
+			}
+			catch(Exception e)
+			{
+				ExternalLogBuilder(context, "Error Message", e.Message);
+				ExternalLogBuilder(context, "Error StackTrace", e.StackTrace);
+			}
+			
+			var errorMessages = formPropertyService.Validate();
+			context.SuccessExternal = errorMessages.Count == 0;
+			context.ResultExternal = string.Empty;
+			
+			foreach(var errorMessage in errorMessages)
+			{
+				context.ResultExternal = string.Format("{0} \n {1} \n", context.ResultExternal, errorMessage);
+				//it could be JSON
+			}
+			foreach(var element in formPropertyService.GetAll())
+			{
+				string dataStr = element.Data == null ? "null" : element.Data.ToString();
+				ExternalLogBuilder(context, "-----");
+				ExternalLogBuilder(context, "Name", element.Name);
+				ExternalLogBuilder(context, "ReadOnly", element.ReadOnlyStatus.ToString());
+				ExternalLogBuilder(context, "Visible", element.VisibleStatus.ToString());
+				ExternalLogBuilder(context, "Required", element.RequiredStatus.ToString());
+				ExternalLogBuilder(context, "Data", dataStr);
+				ExternalLogBuilder(context, "-----");
+			}
+			
+			ExternalLogBuilder(context, "CheckForOnChanges ended");
+		}
+		
+		// OnLoad Script
+		public virtual void StartForm(Context context, FormPropertyService formPropertyService)
+		{
+			ExternalLogBuilder(context, "StartForm started");
+			var typeIds = EntityManager<KBDF_HR_VacationType>.Instance.FindAll ().OrderBy (x => x.Id).Select (x => x.Id).ToList ();
+			var contactSettings = (EntitySettings)context.GetSettingsFor (c => c.VacationType);
+			contactSettings.FilterQuery = string.Format ("Id in ({0})", string.Join (",", typeIds));
+			contactSettings.Save ();
+			formPropertyService.Get ("VacationAlert").Visible (false).SetData(context.VacationAlert);
+			formPropertyService.Get ("Notification").Visible (false).SetData(context.Notification);
+			bool isCertification = context.VacationType != null && context.VacationType.Code == "12";
+			formPropertyService.Get ("MarriageDays").ReadOnly (true).Required (false).Visible (false).SetData(context.MarriageDays);
+			formPropertyService.Get ("VacationEndDate").ReadOnly (true).Required (false).Visible (false).SetData(context.VacationEndDate);
+			formPropertyService.Get ("Days").ReadOnly (isCertification).Required (true).Visible (true).SetData(context.Days);
+			formPropertyService.Get ("DogDate").ReadOnly (false).Required (false).Visible (false).SetData(context.DogDate);
+			formPropertyService.Get ("CertificationField").Visible (isCertification).Required (isCertification).SetData(context.CertificationField);
+			formPropertyService.Get ("CertificationType").Visible (isCertification).Required (isCertification).SetData(context.CertificationType);
+			formPropertyService.Get ("DogDate").ReadOnly (false).Required (false).Visible (false).SetData(context.DogDate);
+			formPropertyService.Add(new FormProperty("DxshahaddetDate", false, false, false, context.DxshahaddetDate));
+			//if (context.BranchOrgItem == null) {
+			formPropertyService.Get ("BranchOrgItem").ReadOnly (true).Required (false).Visible (false).SetData(context.BranchOrgItem);
+			//}
+			if (context.DepartmentOrgItem == null) {
+				formPropertyService.Get ("DepartmentOrgItem").ReadOnly (true).Required (false).Visible (false).SetData(context.DepartmentOrgItem);
+			}
+			if (context.SectionOrgItem == null) {
+				formPropertyService.Get ("SectionOrgItem").ReadOnly (true).Required (false).Visible (false).SetData(context.SectionOrgItem);
+			}
+			if (context.PositionOrgItem == null) {
+				//form.For (c => c.PositionOrgItem).ReadOnly (true).Required (false).Visible (false);
+				formPropertyService.Add(new FormProperty("SubstitutionBool", true, true, true, context.SubstitutionBool));
+			}
+			formPropertyService.Get ("SupportingDocuments").Required (isCertification || context.SelectedUser != context.Initiator).SetData(context.SupportingDocuments);
+			formPropertyService.Get ("SubstitutionUserEmployee").Visible (CheckSubstitutionRequired (context)).Required (false).ReadOnly (false).SetData(context.SubstitutionUserEmployee);
+			formPropertyService.Get ("SubstituteOfSubstitutionEmp").Visible (false).Required (false).ReadOnly (false).SetData(context.SubstituteOfSubstitutionEmp);
+			formPropertyService.Get ("VacationStatementVersion").Visible (context.VacationType != null && context.VacationType.Code.Equals ("1")).ReadOnly (true).SetData(context.VacationStatementVersion);
+			formPropertyService.Get ("PaymentStatus").Visible (context.VacationType != null && context.VacationType.Code.Equals ("1")).Required (context.VacationType != null && context.VacationType.Code.Equals ("1")).ReadOnly (false).SetData(context.PaymentStatus);
+			formPropertyService.Add(new FormProperty("FullVacInfo", (context.StatementDate != null && context.Days.HasValue), true, false, context.FullVacInfo));
+			formPropertyService.Get ("MedicalCertificateNumber").Visible (context.VacationType != null && context.VacationType.Code.Equals ("9")).ReadOnly (false).SetData(context.MedicalCertificateNumber);
+			CalculateMustUseVacDaysCount (context);
+			ExternalLogBuilder(context, "StartForm ended");
+		}
+		
+		// OnChange Script
+		public virtual void FindStructureAndVaInfoByEmp (Context context, FormPropertyService formPropertyService)
+		{
+			var ctx = formPropertyService.Get("SelectedUserEmployee");
+			if(ctx.VisibleStatus && !ctx.ReadOnlyStatus)
+			{
+				/*context.DepartmentOrgItem = null;
+				context.SectionOrgItem = null;
+				context.SubSectionOrgItem = null;
+				context.PositionOrgItem = null;
+				context.Days = 0;
+				context.SelectedUser = null;
+				context.VacationType = null;
+				context.StatementDate = null;
+				context.VacationEndDate = null;
+				context.Days = 0;
+				context.MustUsedVacDaysTillEndOfYear = 0;
+				context.CurrentAvailableVacDays = 0;
+				context.VacationAlert = null;
+				context.VacationTotalCount = 0;
+				//context.PaymentStatus = null;
+				context.VacationStatementVersion = null;
+				*/
+				bool isFound = false;
+				if (context.SelectedUserEmployee != null) {
+					context.SelectedUser = context.SelectedUserEmployee.SystemUser;
+					context.PositionOrgItem = (context.SelectedUserEmployee.TemporaryPosition != null) ? context.SelectedUserEmployee.TemporaryPosition : context.SelectedUserEmployee.MainPosition;
+					context.SectionOrgItem = (KBDF_OrganizationItems)DocflowHelper.findInHierarchyUpper (context.PositionOrgItem, "SECTION", out isFound);
+					// musteqil shobe axtarishi
+					context.DepartmentOrgItem = (KBDF_OrganizationItems)DocflowHelper.findInHierarchyUpper (context.PositionOrgItem, "INDEPENDENTSECTION", out isFound);
+					if (context.DepartmentOrgItem != null && context.DepartmentOrgItem.HRBCode == "1100000000") {
+						context.DepartmentOrgItem = null;
+					}
+					// musteqil shobe varsa bolme axtarisi
+					if (context.DepartmentOrgItem != null) {
+						context.SubSectionOrgItem = context.PositionOrgItem != null ? (KBDF_OrganizationItems)DocflowHelper.findInHierarchyUpper (context.PositionOrgItem, "SUBSECTION", out isFound) : null;
+					}
+					// musteqil shobe yoxdusa traditional shobe bolme department filial axtarisi
+					if (context.DepartmentOrgItem == null) {
+						// shobe axtarishi
+						context.SectionOrgItem = context.PositionOrgItem != null ? (KBDF_OrganizationItems)DocflowHelper.findInHierarchyUpper (context.PositionOrgItem, "SECTION", out isFound) : null;
+						context.SubSectionOrgItem = context.PositionOrgItem != null ? (KBDF_OrganizationItems)DocflowHelper.findInHierarchyUpper (context.PositionOrgItem, "SUBSECTION", out isFound) : null;
+						context.DepartmentOrgItem = context.PositionOrgItem != null ? (KBDF_OrganizationItems)DocflowHelper.findInHierarchyUpper (context.PositionOrgItem, context.PositionOrgItem.IsInBranch ? "BRANCH" : "DEPARTMENT", out isFound) : null;
+					}
+					if (context.SectionOrgItem != null && context.SectionOrgItem.HRBCode == "1100000000") {
+						context.SectionOrgItem = null;
+					}
+					if (context.SubSectionOrgItem != null && context.SubSectionOrgItem.HRBCode == "1100000000") {
+						context.SubSectionOrgItem = null;
+					}
+					if (context.DepartmentOrgItem != null && context.DepartmentOrgItem.HRBCode == "1100000000") {
+						context.DepartmentOrgItem = null;
+					}
+					if (CheckSubstitutionRequired (context)) {
+						formPropertyService.Get ("SubstitutionUserEmployee").Visible (true).Required (false).ReadOnly (false).SetData(context.SubstitutionUserEmployee);
+					}
+					else {
+						formPropertyService.Get ("SubstituteOfSubstitutionEmp").Visible (false).Required (false).ReadOnly (false).SetData(context.SubstituteOfSubstitutionEmp);
+						formPropertyService.Get ("SubstitutionUserEmployee").Visible (false).Required (false).ReadOnly (false).SetData(context.SubstitutionUserEmployee);
+					}
+					FindVacationForEmployee (context);
+					SubstitutionCheckRequiredReplacement (context, formPropertyService);
+					CalculateMustUseVacDaysCount (context);
+					formPropertyService.Get ("SupportingDocuments").Visible (context.Initiator != context.SelectedUserEmployee.SystemUser).Required (context.Initiator != context.SelectedUserEmployee.SystemUser).SetData(context.SupportingDocuments);
+					formPropertyService.Get ("SupportingDocuments").Visible (context.SectionOrgItem != null).Required (false).ReadOnly (true).SetData(context.SupportingDocuments);
+					formPropertyService.Get ("SupportingDocuments").Visible (context.SubSectionOrgItem != null).Required (false).ReadOnly (true).SetData(context.SupportingDocuments);
+					context.OrganizationItemPosition = context.PositionOrgItem.OrganizationItemPosition;
+				}
+			}
+		}
+		
+		public virtual void SubstitutionCheckRequiredReplacement (Context context, FormPropertyService formPropertyService)
+		{
+			/*context.ReplacementWarning = null;
+			context.SubActiveRequiredReplacement = null;
+			*/
+			CheckRequiredReplacement (context, formPropertyService);
+			if (context.StatementDate != null && context.StartWork != null && context.SubstitutionUserEmployee != null && context.RequiredReplacement != null) {
+				string alertMessage = "";
+				// evezedici muveqqeti axtaris inzibatci
+				context.SubActiveRequiredReplacement = EntityManager<KBDF_RequiredReplacement>.Instance.Find (string.Format ("User = {0} AND IsActive = TRUE and StartDate < DateTime({1}, {2}, {3}) and EndDate > DateTime({4}, {5}, {6}) and IsTemporary= True", context.SubstitutionUserEmployee.SystemUser.Id, context.StartWork.Value.Year, context.StartWork.Value.Month, context.StartWork.Value.Day, context.StatementDate.Value.Year, context.StatementDate.Value.Month, context.StatementDate.Value.Day)).FirstOrDefault ();
+				if (context.SubActiveRequiredReplacement != null) {
+					alertMessage = "<p style='color:red; font-size:1.3em;'>Seçdiyiniz əvəzedici şəxs daimi inzibatçı olduğuna " + "görə əvəzedicinin əvəzedicisi xanası boş olmamalıdır (" + context.SubActiveRequiredReplacement.ReplacementType.Name + " - " + context.SubActiveRequiredReplacement.Structure.Name + " - " + context.SubActiveRequiredReplacement.StartDate.Value.ToString ("dd.MM.yyyy") + "-" + context.SubActiveRequiredReplacement.EndDate.Value.ToString ("dd.MM.yyyy") + ")</p>";
+					formPropertyService.Get ("SubstituteOfSubstitutionEmp").Required (true).Visible (true).SetData(context.SubstituteOfSubstitutionEmp);
+					context.ReplacementWarning = new HtmlString (alertMessage);
+					formPropertyService.Get ("ReplacementWarning").Visible (true).SetData(context.ReplacementWarning);
+					return;
+				}
+				else {
+					//evezedici daimi axtaris inzibatci
+					context.SubActiveRequiredReplacement = EntityManager<KBDF_RequiredReplacement>.Instance.Find (string.Format ("User = {0} and IsActive=TRUE and StartDate <= DateTime({1}, {2}, {3}) and EndDate is NULL", context.Substitution.Id, context.StatementDate.Value.Year, context.StatementDate.Value.Month, context.StatementDate.Value.Day)).FirstOrDefault ();
+					if (context.SubActiveRequiredReplacement != null) {
+						alertMessage = "<p style='color:red; font-size:1.3em;'>Seçdiyiniz əvəzedici şəxs daimi inzibatçı olduğuna " + "görə əvəzedicinin əvəzedicisi xanası boş olmamalıdır (" + context.SubActiveRequiredReplacement.ReplacementType.Name + " - " + context.SubActiveRequiredReplacement.Structure.Name + " - " + context.SubActiveRequiredReplacement.StartDate.Value.ToString ("dd.MM.yyyy") + "-dən" + ")</p>";
+						formPropertyService.Get ("SubstituteOfSubstitutionEmp").Required (true).Visible (true).SetData(context.SubstituteOfSubstitutionEmp);
+						context.ReplacementWarning = new HtmlString (alertMessage);
+						formPropertyService.Get ("ReplacementWarning").Visible (true).SetData(context.ReplacementWarning);
+						return;
+					}
+				}
+			}
+		}
+		
+		public virtual void CheckRequiredReplacement (Context context, FormPropertyService formPropertyService)
+		{
+			/*context.ReplacementWarning = null;
+			context.RequiredReplacement = null;
+			*/
+			if (context.StatementDate != null && context.StartWork != null) {
+				string alertMessage = "";
+				//muveqqeti axtaris
+				context.RequiredReplacement = EntityManager<KBDF_RequiredReplacement>.Instance.Find (string.Format ("User = {0} AND IsActive = TRUE and StartDate < DateTime({1}, {2}, {3}) and EndDate > DateTime({4}, {5}, {6}) and IsTemporary= True", context.SelectedUser.Id, context.StartWork.Value.Year, context.StartWork.Value.Month, context.StartWork.Value.Day, context.StatementDate.Value.Year, context.StatementDate.Value.Month, context.StatementDate.Value.Day)).FirstOrDefault ();
+				if (context.RequiredReplacement != null) {
+					alertMessage = "<p style='color:red; font-size:1.3em;'>Seçdiyiniz istifadəçi inzibatçı olduğuna " + "görə əvəzedici şəxs xanası boş olmamalıdır (" + context.RequiredReplacement.ReplacementType.Name + " - " + context.RequiredReplacement.Structure.Name + " - " + context.RequiredReplacement.StartDate.Value.ToString ("dd.MM.yyyy") + "-" + context.RequiredReplacement.EndDate.Value.ToString ("dd.MM.yyyy") + ")</p>";
+					context.SubstitutionBool = true;
+					formPropertyService.Add(new FormProperty("SubstitutionBool", true, true, true, context.SubstitutionBool));
+					formPropertyService.Get ("SubstitutionUserEmployee").Required (true).Visible (true).SetData(context.SubstitutionUserEmployee);
+					context.ReplacementWarning = new HtmlString (alertMessage);
+					formPropertyService.Get ("ReplacementWarning").Visible (true).SetData(context.ReplacementWarning);
+				}
+				else {
+					//daimi axtaris
+					context.RequiredReplacement = EntityManager<KBDF_RequiredReplacement>.Instance.Find (string.Format ("User = {0} and IsActive=TRUE and StartDate <= DateTime({1}, {2}, {3}) and EndDate is NULL ", context.SelectedUser.Id, context.StatementDate.Value.Year, context.StatementDate.Value.Month, context.StatementDate.Value.Day)).FirstOrDefault ();
+					if (context.RequiredReplacement != null) {
+						alertMessage = "<p style='color:red; font-size:1.3em;'>Seçdiyiniz istifadəçi daimi inzibatçı olduğuna " + "görə əvəzedici şəxs xanası boş olmamalıdır (" + context.RequiredReplacement.ReplacementType.Name + " - " + context.RequiredReplacement.Structure.Name + " - " + context.RequiredReplacement.StartDate.Value.ToString ("dd.MM.yyyy") + "-dən" + ")</p>";
+						context.SubstitutionBool = true;
+						formPropertyService.Add(new FormProperty("SubstitutionBool", true, true, true, context.SubstitutionBool));
+						formPropertyService.Get ("SubstitutionUserEmployee").Required (true).Visible (true).SetData(context.SubstitutionUserEmployee);
+						context.ReplacementWarning = new HtmlString (alertMessage);
+						formPropertyService.Get ("ReplacementWarning").Visible (true).SetData(context.ReplacementWarning);
+					}
+				}
+			}
+		}
+		
+		//OnChange Script
+		public virtual void GetSubstitutionUserInfo (Context context, FormPropertyService formPropertyService)
+		{
+			var ctx = formPropertyService.Get("SubstitutionUserEmployee");
+			if (ctx.VisibleStatus && !ctx.ReadOnlyStatus)
+			{
+				SearchOrChangeSubstitutionValue(context);
+				SubstitutionCheckRequiredReplacement(context, formPropertyService);
+			}
+		}
+		
+		public void SearchOrChangeSubstitutionValue (Context context)
+		{
+			context.Substitution = context.SubstitutionUserEmployee != null ? context.SubstitutionUserEmployee.SystemUser : null;
+			context.SubstituteOfSubstitution = context.SubstituteOfSubstitutionEmp != null ? context.SubstituteOfSubstitutionEmp.SystemUser : null;
+			context.SubstitutionUserPosition = context.SubstitutionUserEmployee != null ? context.SubstitutionUserEmployee.MainPosition : null;
+			context.SubsOfSubstituionPosition = context.SubstituteOfSubstitutionEmp != null ? context.SubstituteOfSubstitutionEmp.MainPosition : null;
+		}
+		
+		//OnChange
+		public virtual void VacTypeDynamic (Context context, FormPropertyService formPropertyService)
+		{
+			var ctx = formPropertyService.Get("VacationType");
+			if (ctx.VisibleStatus && !ctx.ReadOnlyStatus)
+			{
+				/*context.StartWork = null;
+				context.VacationEndDate = null;
+				context.Days = null;
+				context.VacationTotalCount = 0;
+				*/
+				context.UseProductionCalendar = context.VacationType.Code == "1" ? true : false;
+				context.Komment = new List<String> {
+					"1",
+					"3",
+					"8",
+					"13"
+				}.Contains (context.VacationType.Code) ? "ndən" : "dən";
+				try {
+					ChangeVacationTypeDynamic (context, formPropertyService);
+					CalculateStartWorkDay (context, formPropertyService);
+					CheckRequiredReplacement (context, formPropertyService);
+					SubstitutionCheckRequiredReplacement (context, formPropertyService);
+					FindVacationForEmployee (context);
+					GetUsedVacDays (context);
+					CalculateMustUseVacDaysCount (context);
+				}
+				catch (Exception ex) {
+					context.VacationAlert = new HtmlString (ex.StackTrace);
+					formPropertyService.Get ("VacationAlert").ReadOnly (true).Required (false).Visible (true).SetData(context.VacationAlert);
+				}
+			}
+		}
+		
+		public void ChangeVacationTypeDynamic (Context context, FormPropertyService formPropertyService)
+		{
+			if (context.VacationType.Code == "6") {
+				context.Days = 2;
+				formPropertyService.Get ("Days").ReadOnly (true).Required (false).Visible (true).SetData(context.Days);
+			}
+			else {
+				context.MarriageDays = null;
+				formPropertyService.Get ("MarriageDays").ReadOnly (true).Required (false).Visible (false).SetData(context.MarriageDays);
+				formPropertyService.Get ("Days").ReadOnly (false).Required (true).Visible (true).SetData(context.Days);
+				if (context.VacationType.Code == "5" || context.VacationType.Code == "9") {
+					context.IncludeExceptionalDaysAndWeenends = false;
+					formPropertyService.Get ("Days").ReadOnly (true).SetData(context.Days);
+					formPropertyService.Get ("VacationEndDate").ReadOnly (false).Required (true).Visible (true).SetData(context.VacationEndDate);
+				}
+				else {
+					formPropertyService.Get ("Days").ReadOnly (false).SetData(context.Days);
+					context.IncludeExceptionalDaysAndWeenends = true;
+					context.VacationEndDate = null;
+					formPropertyService.Get ("VacationEndDate").ReadOnly (true).Required (false).Visible (false).SetData(context.VacationEndDate);
+				}
+			}
+			formPropertyService.Get ("DogDate").Visible (context.VacationType.Code == "9").Required (false).ReadOnly (false).SetData(context.DogDate);
+			formPropertyService.Get ("MedicalCertificateNumber").Visible (context.VacationType.Code == "9").Required (false).ReadOnly (false).SetData(context.MedicalCertificateNumber);
+			if (context.VacationType.Code == "12") {
+				formPropertyService.Get ("CertificationField").Visible (true).Required (true).SetData(context.CertificationField);
+				context.Days = 2;
+				formPropertyService.Get ("Days").ReadOnly (true).SetData(context.Days);
+				//GetStartDate (context, form);
+			}
+			else {
+				//form.For (x => x.Days).ReadOnly (false);
+				formPropertyService.Get ("CertificationField").Visible (false).Required (false).SetData(context.CertificationField);
+				formPropertyService.Get ("CertificationType").Visible (false).Required (false).SetData(context.CertificationType);
+				context.CertificationField = null;
+				context.CertificationType = null;
+			}
+			if (context.VacationType.Code == "8") {
+				context.Days = 1;
+				formPropertyService.Get ("Days").Visible (true).ReadOnly (true).SetData(context.Days);
+			}
+			if (context.VacationType.Code == "7") {
+				context.Days = 3;
+				formPropertyService.Get ("Days").Visible (true).ReadOnly (true).SetData(context.Days);
+			}
+			var settingz = (DateTimeSettings)context.GetSettingsFor (c => c.StatementDate);
+			if (context.VacationType != null && context.VacationType.Code == "1") {
+				if (!context.HRSection.Contains (context.Initiator)) {
+					settingz.MinDateValue = DateTime.Today.AddMonths (-1);
+				}
+				formPropertyService.Get ("PaymentStatus").Visible (true).Required (true).ReadOnly (false).SetData(context.PaymentStatus);
+			}
+			else {
+				context.UseProductionCalendar = false;
+				settingz.MinDateValue = new DateTime ();
+				formPropertyService.Get ("PaymentStatus").Visible (false).Required (false).ReadOnly (true).SetData(context.PaymentStatus);
+			}
+			formPropertyService.Get ("SupportingDocuments").Visible (true).ReadOnly (false).Required (new List<string> {
+				"3",
+				"5",
+				"9",
+				"12",
+				"13"
+			}.Contains (context.VacationType.Code) || context.SelectedUser != context.Initiator).SetData(context.SupportingDocuments);
+			settingz.Save ();
+			formPropertyService.Get ("VacationTotalCount").Visible (context.VacationType.Code.Equals ("1")).ReadOnly (true).SetData(context.VacationTotalCount);
+		}
+		
+		public void CalculateStartWorkDay (Context context, FormPropertyService formPropertyService)
+		{
+			context.VacationTimeSpan = null;
+			context.StartWork = null;
+			if ((context.Days == null || context.StatementDate == null || context.VacationType == null) && context.IncludeExceptionalDaysAndWeenends != false) {
+				return;
+			}
+			if (context.Days.HasValue) {
+				if (context.Days <= 0) {
+					context.Days = null;
+					formPropertyService.Get("Days").SetData(context.Days);
+					return;
+				}
+				context.VacationTimeSpan = new TimeSpan ((int)context.Days, 0, 0, 0);
+			}
+			if (context.IncludeExceptionalDaysAndWeenends == false && context.VacationEndDate != null) {
+				if (context.VacationEndDate < context.StatementDate) {
+					context.VacationEndDate = null;
+					context.Days = null;
+					return;
+				}
+				TimeSpan remaindate;
+				DateTime d1 = context.VacationEndDate.Value;
+				DateTime d2 = context.StatementDate.Value;
+				remaindate = d1 - d2;
+				var DaysTMP = (long)remaindate.Days;
+				context.Days = DaysTMP + 1;
+				context.VacationTimeSpan = new TimeSpan ((int)context.Days, 0, 0, 0);
+				context.VacationEndDate = context.StatementDate.Value.AddDays (-1) + context.VacationTimeSpan.Value;
+				context.StartWork = context.VacationEndDate.Value.AddDays (1);
+			}
+			else
+				if (context.UseProductionCalendar) {
+					context.VacationEndDate = null;
+					GetHolidayDatesFromObject (context);
+				}
+				else {
+					try {
+						//parameters.Success = true;
+						var prodCal = Locator.GetServiceNotNull<IProductionCalendarService> ();
+						if (context.StatementDate.HasValue && context.VacationTimeSpan.HasValue) {
+							context.VacationEndDate = context.StatementDate.Value + context.VacationTimeSpan.Value;
+							var evalDate = context.UseProductionCalendar ? prodCal.EvalTargetTime (context.StatementDate.Value, context.VacationTimeSpan.Value) : context.VacationEndDate.Value;
+							var delta = 1;
+							if (evalDate.Ticks > context.VacationEndDate.Value.Ticks) {
+								context.StartWork = evalDate;
+								delta = -1;
+							}
+							else {
+								//						parameters.PrevEndDateWorkDays = evalDate;
+							}
+							var isWorkDay = prodCal.IsWorkDay (context.VacationEndDate.Value);
+							var workDate = isWorkDay ? evalDate : context.VacationEndDate.Value;
+							while (!isWorkDay) {
+								workDate = workDate.AddDays (delta);
+								isWorkDay = prodCal.IsWorkDay (workDate);
+							}
+							var wTime = prodCal.GetWorkTimeStart (workDate);
+							if (delta == 1) {
+								//wTime = prodCal.GetWorkTimeStart(workDate);
+								context.StartWork = new DateTime (workDate.Year, workDate.Month, workDate.Day, wTime.Hours, wTime.Minutes, wTime.Seconds);
+							}
+							context.VacationEndDate = context.VacationEndDate.Value.AddDays (-1);
+						}
+					}
+					catch (Exception ex) {
+						//	parameters.ErrorMessage = ex.Message;
+						//	parameters.Success = false;
+					}
+				}
+			GenerateNewStatementVersion (context);
+			string notificationAze = "";
+			string notificationEng = "";
+			if (context.Initiator != context.SelectedUserEmployee.SystemUser && context.StartWork.HasValue) {
+				notificationAze += "Sizə təqdim olunmuş ərizəni çap etdikdən sonra müvafiq hissədən məzuniyyətə çıxacaq əməkdaşın imzalamasını təmin edin." + "Daha sonra imzalı sənədi  skan edin və təsdiqedici sənəd bölməsinə yükləyin.";
+				notificationEng += "After printing the application submitted to you, ensure the signature of the employee who will be on leave from the relevant department." + "Then scan the signed document  and upload it to the confirmation document section.";
+			}
+			switch (context.VacationType.Code) {
+			case "3":
+				notificationAze += " Təhsil haqqında arayış sənədini yükləyin.";
+				notificationEng += "Upload your education certificate.";
+				break;
+			case "12":
+				notificationAze += " Sertifikasiya məzuniyyəti üçün əsas hesab edilən sənədi yükləyin.";
+				notificationEng += "Upload the document that is considered the basis for the Certification leave.";
+				break;
+			case "9":
+				notificationAze += " Hamiləlik və doğuşa görə xəstəlik vərəqəsinin surətini əlavə edin";
+				notificationEng += " Upload a copy of the sick leave certificate for pregnancy and childbirth.";
+				break;
+			case "5":
+				notificationAze += " Övladınızın doğum haqqında şəhadətnaməsinin surətini əlavə edin";
+				notificationEng += " Upload the copy of your child's birth certificate.";
+				break;
+			case "13":
+				notificationAze += "Yaradıcılıq məzuniyyəti üçün əsas hesab edlən sənədi əlavə edin";
+				notificationEng += "Download the document considered essential for creative leave";
+				break;
+			}
+			string notification = notificationAze + notificationEng;
+			context.Notification = new HtmlString (string.Format ("<p style='color:red; font-size:1em;'> {0} </p>", notification));
+			formPropertyService.Get ("Notification").Visible (!string.IsNullOrWhiteSpace (notification)).Required (false).ReadOnly (true).SetData(context.Notification);
+			formPropertyService.Get ("VacationStatementVersion").Visible (context.Initiator != context.SelectedUserEmployee.SystemUser).Required (false).ReadOnly (true).SetData(context.VacationStatementVersion);
+		}
+		
+		//OnChange Script
+		public virtual void CertificationFieldChange (Context context, FormPropertyService formPropertyService)
+		{
+			var ctx = formPropertyService.Get("CertificationField");
+			if (ctx.VisibleStatus && !ctx.ReadOnlyStatus)
+			{
+				formPropertyService.Get ("CertificationType").Visible (true).Required (true).SetData(context.CertificationType);
+				var settings = (EntitySettings)context.GetSettingsFor (e => e.CertificationType);
+				settings.FilterQuery = "Field = " + context.CertificationField.Id;
+				settings.Save ();
+				if (context.StatementDate != null && context.StartWork != null) {
+					GenerateNewStatementVersion (context);
+				}
+			}
+		}
+		
+		//OnChange Script
+		public virtual void CertificateType_OnChange (Context context, FormPropertyService formPropertyService)
+		{
+			var ctx = formPropertyService.Get("CertificationType");
+			if (ctx.VisibleStatus && !ctx.ReadOnlyStatus)
+			{
+				if (context.StatementDate != null && context.StartWork != null) {
+					GenerateNewStatementVersion (context);
+				}
+			}
+		}
+		
+		//OnChange script
+		public virtual void StatementDate_OnChange (Context context, FormPropertyService formPropertyService)
+		{
+			try
+			{
+				var ctx = formPropertyService.Get("StatementDate");
+				if (ctx.VisibleStatus && !ctx.ReadOnlyStatus)
+				{
+					if (context.StatementDate == null) {
+						context.Days = null;
+						context.StartWork = null;
+					}
+					formPropertyService.Get ("Substitution").Required (false).SetData(context.Substitution);
+					formPropertyService.Add(new FormProperty("SubstituteOfSubstitution", requiredStatus: false, data: context.SubstituteOfSubstitution));
+					WarningWeekends (context, formPropertyService);
+					CalculateStartWorkDay (context, formPropertyService);
+					//CheckRequiredReplacement (context, form);
+					SubstitutionCheckRequiredReplacement (context, formPropertyService);
+					FindVacationForEmployee (context);
+					GetUsedVacDays (context);
+					CalculateAvailableVacDays (context);
+					formPropertyService.Get ("FullVacInfo").Visible (context.VacationType.Code.Equals ("1")).ReadOnly (true).Required (false).SetData(context.FullVacInfo);
+				}
+			}
+			catch (Exception ex) {
+				context.VacationAlert = new HtmlString (ex.Message);
+				formPropertyService.Get ("VacationAlert").ReadOnly (true).Required (false).Visible (true).SetData(context.VacationAlert);
+			}
+		}
+		
+		public virtual void WarningWeekends (Context context, FormPropertyService formPropertyService)
+		{
+			formPropertyService.Get ("VacationAlert").Visible (false).SetData(context.VacationAlert);
+			if (context.VacationType != null && context.VacationType.Code == "12") {
+				context.Days = 2;
+				formPropertyService.Get ("Days").ReadOnly (true).SetData(context.Days);
+			}
+			if (context.VacationType != null && (context.VacationType.Code == "5" || context.VacationType.Code == "9")) {
+				return;
+			}
+			var ExceptionDays = EntityManager<KDBF_ExceptionalDays>.Instance.FindAll ();
+			var statementDateMonth = context.StatementDate.Value.Month;
+			var statementDateYear = context.StatementDate.Value.Year;
+			foreach (var day in ExceptionDays) {
+				if (day.StartDate.Value.Month == statementDateMonth && day.StartDate.Value.Year == statementDateYear) {
+					TimeSpan startDiff = new DateTime (day.StartDate.Value.Year, day.StartDate.Value.Month, day.StartDate.Value.Day) - context.StatementDate.Value;
+					TimeSpan endDiff = new DateTime (day.EndDate.Value.Year, day.EndDate.Value.Month, day.EndDate.Value.Day) - context.StatementDate.Value;
+					if (startDiff.Days <= 0 && endDiff.Days >= 0) {
+						string alertMessage = "<p style='color:red; font-size:1.5em;'>Qeyri iş günlərində məzuniyyət yaradıla bilməz. / Leave cannot be created on non-working days.</p>";
+						context.VacationAlert = new HtmlString (alertMessage);
+						formPropertyService.Get ("VacationAlert").ReadOnly (true).Required (false).Visible (true).SetData(context.VacationAlert);
+						context.StartWork = null;
+						context.StatementDate = null;
+						return;
+					}
+				}
+			}
+			if (context.StatementDate != null) {
+				var prodCal = Locator.GetServiceNotNull<IProductionCalendarService> ();
+				bool isWorkDay = prodCal.IsWorkDay (context.StatementDate.Value);
+				if (!isWorkDay) {
+					string alertMessage = "<p style='color:red; font-size:1.5em;'>Qeyri iş günlərində məzuniyyət yaradıla bilməz. / Leave cannot be created on non-working days.</p>";
+					context.VacationAlert = new HtmlString (alertMessage);
+					formPropertyService.Get ("VacationAlert").ReadOnly (true).Required (false).Visible (true).SetData(context.VacationAlert);
+					context.StartWork = null;
+					context.StatementDate = null;
+					return;
+				}
+			}
+			/*if (context.StatementDate != null && ((int)context.StatementDate.Value.DayOfWeek == 6 || (int)context.StatementDate.Value.DayOfWeek == 0))
+				{
+					context.StatementDate = null;
+					string alertMessage = "<p style='color:red; font-size:2em;'>Qeyri iş günləri məzuniyyət yaratmaq olmaz!</p>";
+					context.VacationAlert = new HtmlString(alertMessage);
+					form.For(c => c.VacationAlert).ReadOnly(true).Required(false).Visible(true);
+					
+					
+				}*/
+		}
+		
+		//OnChange Script
+		public virtual void Days_OnChange (Context context, FormPropertyService formPropertyService)
+		{
+			var ctx = formPropertyService.Get("VacationEndDate");
+			var ctxDays = formPropertyService.Get("Days");
+			if ((ctx.VisibleStatus && !ctx.ReadOnlyStatus) || (ctxDays.VisibleStatus && !ctxDays.ReadOnlyStatus))
+			{
+				formPropertyService.Add(new FormProperty("Substitution", requiredStatus: false, data: context.Substitution));
+				formPropertyService.Get ("Substitution").Required (false).SetData(context.Substitution);
+				formPropertyService.Add(new FormProperty("SubstituteOfSubstitution", requiredStatus: false, data: context.SubstituteOfSubstitution));
+				formPropertyService.Get ("SubstituteOfSubstitution").Required (false).SetData(context.SubstituteOfSubstitution);
+				FindVacationForEmployee (context);
+				GetUsedVacDays (context);
+				CalculateStartWorkDay (context, formPropertyService);
+				SubstitutionCheckRequiredReplacement (context, formPropertyService);
+				CalculateAvailableVacDays (context);
+				CheckVacationRule (context, formPropertyService);
+			}
+		}
+		
+		public void CheckVacationRule (Context context, FormPropertyService formPropertyService)
+		{
+			string notificationText = "";
+			if (context.VacationType.Code.Equals ("1")) {
+				var vacCount = context.FullVacInfo.Where (x => x.StartPeriod <= context.StatementDate).Select (x => x.Unused).Sum () - context.Days;
+				if (vacCount < 0) {
+					context.Days = 0;
+					context.StatementDate = null;
+					context.StartWork = null;
+					notificationText = "İstifadə etmək istədiyiniz məzuniyyətin gün sayı cari limitinizdən artıqdır!" + Environment.NewLine + "The number of vacation days you want to use exceeds your current limit!";
+					context.VacationAlert = new HtmlString (string.Format ("<p style='color:red; font-size:1.3em;'> {0}</p>", notificationText));
+					formPropertyService.Get ("VacationAlert").Visible (true).ReadOnly (true).SetData(context.VacationAlert);
+				}
+				else
+					if (context.CurrentAvailableVacDays < 0) {
+						notificationText = string.Format ("Sizin cari günə formalaşmış {0} gün məzuniyyətiniz var.{1} gün avans məzuniyyət istifadə edəcəksiniz.", 0, context.Days) + Environment.NewLine + string.Format ("You currently have {0} days of accrued leave. You will use {1} days of advance leave.", 0, context.Days);
+						context.VacationAlert = new HtmlString (string.Format ("<p style='color:red; font-size:1.3em;'> {0} </p>", notificationText));
+						formPropertyService.Get ("VacationAlert").Visible (true).ReadOnly (true).SetData(context.VacationAlert);
+					}
+					else
+						if (context.Days > context.CurrentAvailableVacDays) {
+							notificationText = string.Format ("Sizin cari günə formalaşmış {0} gün məzuniyyətiniz var.{1} gün avans məzuniyyət istifadə edəcəksiniz.", context.CurrentAvailableVacDays, context.Days - context.CurrentAvailableVacDays) + Environment.NewLine + string.Format ("You currently have {0} days of accrued leave. You will use {1} days of advance leave.", context.CurrentAvailableVacDays, context.Days - context.CurrentAvailableVacDays);
+							context.VacationAlert = new HtmlString (string.Format ("<p style='color:red; font-size:1.3em;'> {0} </p>", notificationText));
+							formPropertyService.Get ("VacationAlert").Visible (true).ReadOnly (true).SetData(context.VacationAlert);
+						}
+						else {
+							context.VacationAlert = null;
+							formPropertyService.Get ("VacationAlert").Visible (false).ReadOnly (true).SetData(context.VacationAlert);
+						}
+			}
+		}
+		
+		public virtual void ExternalLogBuilder(Context context, string logData)
+		{
+			context.LogExternal = string.Format("{0} \n {1}", context.LogExternal, logData);
+		}
+		public virtual void ExternalLogBuilder(Context context, string description, string logData)
+		{
+			context.LogExternal = string.Format("{0} \n {1}: {2}", context.LogExternal, description, logData);
+		}
+	}
+	
+	public class FormProperty
+	{
+		public FormProperty()
+		{
+			
+		}
+		public FormProperty(string name, bool visibleStatus = true, bool readOnlyStatus = false, bool requiredStatus = false, object data = null)
+		{
+			this.Name = name;
+			this.VisibleStatus = visibleStatus;
+			this.ReadOnlyStatus = readOnlyStatus;
+			this.RequiredStatus = requiredStatus;
+			this.Data = data;
+		}
+		
+		public string Name { get; set; }
+	    public bool VisibleStatus { get; set; }
+	    public bool ReadOnlyStatus { get; set; }
+	    public bool RequiredStatus { get; set; }
+		public object Data { get; set; }
+	    
+	    public FormProperty Visible(bool data)
+	    {
+			this.VisibleStatus = data;
+			return this;
+	    }
+	    public FormProperty ReadOnly(bool data)
+	    {
+			this.ReadOnlyStatus = data;
+			return this;
+	    }
+	    public FormProperty Required(bool data)
+	    {
+			this.RequiredStatus = data;
+			return this;
+	    }
+	    public FormProperty SetData(object data)
+	    {
+			this.Data = data;
+			return this;
+	    }
+	}
+	
+	public class FormPropertyService{
+		private List<FormProperty> listFormProperty;
+				
+	    public FormPropertyService(List<FormProperty> formProperties)
+	    {
+			this.listFormProperty = formProperties;  	
+	    }
+	
+	    public void Add(FormProperty formProperty)
+	    {
+	    	if(!listFormProperty.Any(x => x.Name == formProperty.Name))
+	    	{
+				listFormProperty.Add(formProperty);
+	    	}
+	    }
+	    public void Remove(FormProperty formProperty)
+	    {
+	    	if(listFormProperty.Any(x => x.Name == formProperty.Name))
+	    	{
+				listFormProperty.Remove(formProperty);
+	    	}
+	    }
+	    public FormProperty Get(string name)
+	    {
+			return listFormProperty.FirstOrDefault(x => x.Name == name);
+	    }
+	    
+	    public List<FormProperty> GetAll()
+	    {
+			return this.listFormProperty;
+	    }
+	    
+	    public List<string> Validate()
+	    {
+			List<string> errorMessages = new List<string>();
+			foreach(var formProperty in listFormProperty)
+			{
+				if(formProperty.RequiredStatus && formProperty.Data == null)
+				{
+					errorMessages.Add(string.Format("{0} cannot be null", formProperty.Name));
+				}
+				else if(formProperty.RequiredStatus && formProperty.Data != null && string.IsNullOrWhiteSpace(formProperty.Data.ToString()))
+				{
+					errorMessages.Add(string.Format("{0} cannot be empty", formProperty.Name));
+				}
+			}
+			return errorMessages;
+	    }
 	}
 }
